@@ -1,0 +1,16 @@
+# Python environment and generated files
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local passwords and configuration
+.env
+.env.*
+!.env.example
+
+# Local database backups and logs
+backups/
+*.backup
+*.dump
+*.log
