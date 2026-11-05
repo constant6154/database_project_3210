@@ -339,3 +339,131 @@ footer {
         scroll-behavior: auto;
     }
 }
+
+
+.filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 18px;
+    margin-top: 28px;
+    padding: 22px;
+    background: #fffefa;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+.filter-field {
+    min-width: 0;
+}
+
+.filter-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.filter-field select,
+.filter-field input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 1px solid #abbcb5;
+    border-radius: 7px;
+    background: white;
+    color: var(--navy);
+    font: inherit;
+    font-size: 16px;
+}
+
+.filter-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.filter-submit {
+    margin-top: 0;
+    min-height: 48px;
+    border: 0;
+    cursor: pointer;
+    justify-content: center;
+    font-family: inherit;
+}
+
+.filter-actions .text-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: 14px;
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+    outline: 3px solid var(--teal);
+    outline-offset: 3px;
+}
+
+.hero > *,
+.slot-card {
+    min-width: 0;
+}
+
+.slot-card h3,
+.department {
+    overflow-wrap: anywhere;
+}
+
+.card-footer {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 1000px) {
+    .filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .filter-actions {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 700px) {
+    .filters {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 18px;
+    }
+
+    .filter-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-actions .text-link {
+        justify-content: center;
+    }
+
+    .site-header,
+    footer {
+        flex-wrap: wrap;
+    }
+
+    .summary {
+        gap: 12px 20px;
+    }
+
+    h1 {
+        font-size: clamp(42px, 10vw, 58px);
+        letter-spacing: -2px;
+    }
+
+    .hero .button {
+        max-width: 100%;
+        gap: 16px;
+    }
+}
