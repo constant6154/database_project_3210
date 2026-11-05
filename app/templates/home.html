@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Veya — Care, coordinated.</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('home') }}"
+           aria-label="Veya home">veya<span>・</span></a>
+        <a class="nav-link" href="#availability">Explore availability ↗</a>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div>
+                <p class="eyebrow">YOUR NEXT STEP TO BETTER CARE</p>
+                <h1>Care,<br><em>coordinated.</em></h1>
+                <p class="hero-description">
+                    Find a doctor. Find your time.
+                    Make room for what matters.
+                </p>
+                <a class="button" href="#availability">
+                    View available appointments <span>↗</span>
+                </a>
+            </div>
+
+            <aside class="hero-note">
+                <span class="note-symbol" aria-hidden="true">✳</span>
+                <p>A little clarity.<br>A little less waiting.</p>
+                <span class="note-caption">
+                    Your care journey starts with the right appointment.
+                </span>
+            </aside>
+        </section>
+
+        <section id="availability" class="availability">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">FIND YOUR TIME</p>
+                    <h2>Upcoming availability</h2>
+                </div>
+                <p class="timezone">All times in Bangladesh · UTC+6</p>
+            </div>
+
+            {% if error %}
+                <div class="message" role="alert">
+                    <h3>Availability is temporarily unavailable.</h3>
+                    <p>Please try again in a moment.</p>
+                    <a class="text-link" href="{{ url_for('home') }}">
+                        Try again ↗
+                    </a>
+                </div>
+            {% elif slots %}
+                <div class="summary">
+                    <span><strong>{{ slots | length }}</strong> slots shown</span>
+                    <span><strong>{{ doctor_count }}</strong> doctors listed</span>
+                    <span><strong>{{ department_count }}</strong> departments</span>
+                </div>
+
+                <div class="slot-grid">
+                    {% for slot in slots %}
+                        <article class="slot-card">
+                            <div class="card-top">
+                                <span class="department">
+                                    {{ slot.department }}
+                                </span>
+                                <span class="available">Available</span>
+                            </div>
+
+                            <h3>{{ slot.doctor_name }}</h3>
+                            <p class="date">{{ slot.appointment_date }}</p>
+                            <p class="time">
+                                {{ slot.start_time }} – {{ slot.end_time }}
+                            </p>
+
+                            <div class="card-footer">
+                                <span>Consultation fee</span>
+                                <strong>
+                                    Tk {{ "%.2f" | format(slot.consultation_fee) }}
+                                </strong>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+
+                <p class="list-note">
+                    Showing up to 100 upcoming slots.
+                    Availability may change before a booking is confirmed.
+                </p>
+            {% else %}
+                <div class="message">
+                    <h3>No available appointments right now.</h3>
+                    <p>Please check again when new slots are available.</p>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+
+    <footer>
+        <span class="footer-brand">veya.</span>
+        <span>Care, coordinated.</span>
+    </footer>
+</body>
+</html>
