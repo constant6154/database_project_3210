@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create account — Veya</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('home') }}"
+           aria-label="Veya home">veya<span>・</span></a>
+        <a class="nav-link" href="{{ url_for('home') }}#availability">
+            Explore availability ↗
+        </a>
+    </header>
+
+    <main>
+        <section class="auth-layout">
+            <div class="auth-intro">
+                <p class="eyebrow">YOUR CARE STARTS HERE</p>
+                <h1>A little closer<br>to <em>better care.</em></h1>
+                <p class="hero-description">
+                    Create your patient account.
+                    Take the first step towards care that fits your life.
+                </p>
+                <p class="auth-hint">
+                    Already exploring?
+                    <a class="text-link"
+                       href="{{ url_for('home') }}#availability">
+                        Browse appointments
+                    </a>
+                </p>
+            </div>
+
+            <div class="auth-card">
+                <h2>Create account</h2>
+                <p class="auth-hint">Your patient profile, all in one place.</p>
+
+                {% for category, message in get_flashed_messages(
+                    with_categories=true
+                ) %}
+                    <div class="auth-success" role="status">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+
+                {% if page_error %}
+                    <div class="auth-error" role="alert">
+                        {{ page_error }}
+                    </div>
+                {% endif %}
+
+                {% if form.csrf_token.errors %}
+                    <div class="auth-error" role="alert">
+                        Your form expired or could not be verified.
+                        Please reload this page and try again.
+                    </div>
+                {% endif %}
+
+                <form method="post"
+                      action="{{ url_for('auth.register') }}">
+                    {{ form.hidden_tag() }}
+
+                    {% for field, autocomplete in [
+                        (form.full_name, 'name'),
+                        (form.email, 'email'),
+                        (form.phone, 'tel'),
+                        (form.password, 'new-password'),
+                        (form.confirm_password, 'new-password')
+                    ] %}
+                        <div class="filter-field auth-field">
+                            {{ field.label }}
+
+                            {% if field.name == 'email' %}
+                                {{ field(
+                                    type='email',
+                                    autocomplete=autocomplete,
+                                    aria_describedby=field.id ~ '-help'
+                                ) }}
+                            {% elif field.name == 'phone' %}
+                                {{ field(
+                                    type='tel',
+                                    autocomplete=autocomplete,
+                                    aria_describedby=field.id ~ '-help'
+                                ) }}
+                            {% else %}
+                                {{ field(
+                                    autocomplete=autocomplete,
+                                    aria_describedby=field.id ~ '-help'
+                                ) }}
+                            {% endif %}
+
+                            <div id="{{ field.id }}-help">
+                                {% if field.name == 'password' %}
+                                    <p class="auth-hint">
+                                        Use 15–128 characters.
+                                        A long, memorable phrase works well.
+                                    </p>
+                                {% endif %}
+
+                                {% for error in field.errors %}
+                                    <p class="field-error" role="alert">
+                                        {{ error }}
+                                    </p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endfor %}
+
+                    {{ form.submit(class_='button auth-submit') }}
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <span class="footer-brand">veya.</span>
+        <span>Care, coordinated.</span>
+    </footer>
+</body>
+</html>

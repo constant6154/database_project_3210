@@ -1,6 +1,7 @@
 import os
 from datetime import date
 from pathlib import Path
+from .auth import auth
 
 import psycopg
 from psycopg.rows import dict_row
@@ -14,6 +15,22 @@ load_dotenv(PROJECT_ROOT / ".env", interpolate=False)
 
 def create_app():
     app = Flask(__name__)
+
+    secret_key = os.getenv("SECRET_KEY")
+
+    if not secret_key or len(secret_key) < 32:
+        raise RuntimeError(
+            "Set a strong SECRET_KEY in your root .env file."
+        )
+
+    app.config.update(
+        SECRET_KEY=secret_key,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        MAX_CONTENT_LENGTH=64 * 1024,
+    )
+
+    app.register_blueprint(auth)
 
     required = [
         "DB_HOST", "DB_PORT", "DB_NAME",

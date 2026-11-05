@@ -11,7 +11,14 @@
     <header class="site-header">
         <a class="brand" href="{{ url_for('home') }}"
            aria-label="Veya home">veya<span>・</span></a>
-        <a class="nav-link" href="#availability">Explore availability ↗</a>
+               <nav class="header-nav" aria-label="Main navigation">
+            <a class="nav-link" href="#availability">
+                Explore availability ↗
+            </a>
+            <a class="nav-link" href="{{ url_for('auth.register') }}">
+                Create account
+            </a>
+        </nav>
     </header>
 
     <main>
