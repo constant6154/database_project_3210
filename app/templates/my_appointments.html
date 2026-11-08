@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My appointments — Veya</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('home') }}">veya<span>・</span></a>
+        <a class="nav-link" href="{{ url_for('auth.account') }}">My account</a>
+    </header>
+
+    <main>
+        <section class="availability">
+            <div class="section-heading">
+                <h1>My <em>appointments.</em></h1>
+                <p class="timezone">Bangladesh time · UTC+6</p>
+            </div>
+
+            {% for category, message in get_flashed_messages(with_categories=true) | unique %}
+    <p class="{{ 'auth-success' if category == 'success' else 'auth-error' }}"
+       role="status">
+        {{ message }}
+    </p>
+{% endfor %}
+
+            {% if appointments %}
+                <div class="slot-grid">
+                    {% for visit in appointments %}
+                        <article class="slot-card">
+                            <div class="card-top">
+                                <span class="department">{{ visit.department }}</span>
+                                <strong>{{ visit.status }}</strong>
+                            </div>
+                            <h3>{{ visit.doctor_name }}</h3>
+                            <p class="date">{{ visit.visit_date }}</p>
+                            <p class="time">{{ visit.start_time }} – {{ visit.end_time }}</p>
+                            <div class="card-footer">
+                                <span>Fee at booking</span>
+                                <strong>Tk {{ "%.2f" | format(visit.booked_fee) }}</strong>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="message">
+                    <h3>No appointments yet.</h3>
+                    <p>Your visits will appear here after your first booking.</p>
+                </div>
+            {% endif %}
+
+            <a class="button" href="{{ url_for('home') }}#availability">
+                Browse appointments ↗
+            </a>
+        </section>
+    </main>
+</body>
+</html>

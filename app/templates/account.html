@@ -21,6 +21,9 @@
             <div class="auth-intro">
                 <p class="eyebrow">MY ACCOUNT</p>
                 <h1>Welcome, <em>{{ full_name }}.</em></h1>
+                <a class="button" href="{{ url_for('auth.my_appointments') }}">
+    My appointments
+</a>
                 <a class="button" href="{{ url_for('home') }}#availability">
                     Browse appointments ↗
                 </a>

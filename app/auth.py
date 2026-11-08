@@ -4,6 +4,7 @@ from flask import session
 from psycopg.rows import dict_row
 from werkzeug.security import check_password_hash
 
+
 import psycopg
 from flask import (
     Blueprint, current_app, flash,
@@ -263,3 +264,134 @@ def logout():
 
     session.clear()
     return redirect(url_for("home"), code=303)
+
+
+@auth.get("/my-appointments")
+def my_appointments():
+    user_id = session.get("user_id")
+    email = session.get("email")
+
+    if user_id is None or not email:
+        return redirect(url_for("auth.login"))
+
+    try:
+        patient = lookup_patient(email)
+        if patient is None or patient["user_id"] != user_id:
+            session.clear()
+            return redirect(url_for("auth.login"))
+
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya appointment history",
+            row_factory=dict_row,
+        ) as connection:
+            appointments = connection.execute("""
+                SELECT
+                    appointment_id,
+                    doctor_name,
+                    department,
+                    status,
+                    booked_fee,
+                    to_char(
+                        starts_at AT TIME ZONE 'Asia/Dhaka',
+                        'Dy, DD Mon YYYY'
+                    ) AS visit_date,
+                    to_char(
+                        starts_at AT TIME ZONE 'Asia/Dhaka',
+                        'HH12:MI AM'
+                    ) AS start_time,
+                    to_char(
+                        ends_at AT TIME ZONE 'Asia/Dhaka',
+                        'HH12:MI AM'
+                    ) AS end_time
+                FROM hospital.patient_appointments(%s)
+                ORDER BY starts_at DESC, appointment_id DESC
+            """, (user_id,)).fetchall()
+
+    except psycopg.Error as exc:
+        current_app.logger.error(
+            "Appointment history unavailable; SQLSTATE=%s", exc.sqlstate
+        )
+        return "We couldn't load your appointments. Please try again.", 503
+
+    response = current_app.make_response(render_template(
+        "my_appointments.html",
+        appointments=appointments,
+    ))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+class BookingForm(FlaskForm):
+    submit = SubmitField("Book this slot")
+
+
+@auth.app_context_processor
+def booking_form_for_home():
+    if request.endpoint == "home" and session.get("user_id"):
+        return {"booking_form": BookingForm()}
+    return {}
+
+
+@auth.post("/slots/<int:slot_id>/book")
+def book_slot(slot_id):
+    user_id = session.get("user_id")
+    email = session.get("email")
+
+    if not user_id or not email:
+        return redirect(url_for("auth.login"), code=303)
+
+    if not BookingForm().validate_on_submit():
+        return "Please reload the availability page and try again.", 400
+
+    try:
+        patient = lookup_patient(email)
+        if patient is None or patient["user_id"] != user_id:
+            session.clear()
+            return redirect(url_for("auth.login"), code=303)
+
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya booking",
+        ) as connection:
+            row = connection.execute(
+                "SELECT hospital.book_appointment(%s, %s)",
+                (patient["patient_id"], slot_id),
+            ).fetchone()
+            appointment_id = row[0]
+
+        # At this point the connection has committed the booking.
+        flash(f"Appointment #{appointment_id} is booked.", "success")
+
+    except psycopg.errors.RaiseException as exc:
+        message = exc.diag.message_primary
+        if message == "Patient already has an overlapping appointment":
+            feedback = "You already have an appointment at that time."
+        elif message in {
+            "Slot does not exist",
+            "Slot is blocked",
+            "Slot is already booked",
+            "Doctor account is inactive",
+            "Cannot book a slot that has already started",
+        }:
+            feedback = "This slot is no longer available. Please choose another."
+        else:
+            current_app.logger.error("Booking rejected; SQLSTATE=%s", exc.sqlstate)
+            feedback = "The booking could not be completed."
+        flash(feedback, "error")
+
+    except psycopg.Error as exc:
+        current_app.logger.error("Booking failed; SQLSTATE=%s", exc.sqlstate)
+        return "Booking is temporarily unavailable. Check My appointments before retrying.", 503
+
+    return redirect(url_for("auth.my_appointments"), code=303)
