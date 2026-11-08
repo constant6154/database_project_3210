@@ -1,5 +1,5 @@
 import os
-
+from wtforms import DateField
 from flask import session
 from psycopg.rows import dict_row
 from werkzeug.security import check_password_hash
@@ -297,8 +297,22 @@ def my_appointments():
                     department,
                     status,
                     booked_fee,
+                                        wait.request_id AS waitlist_id,
+                    wait.earliest_date AS waitlist_from,
+                    wait.latest_date AS waitlist_until,
                                         (status = 'Booked' AND starts_at > CURRENT_TIMESTAMP)
                         AS can_cancel,
+
+                                            (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::date
+                        AS clinic_today,
+                    (starts_at AT TIME ZONE 'Asia/Dhaka')::date - 1
+                        AS last_earlier_date,
+                    (status = 'Booked' AND
+                        (starts_at AT TIME ZONE 'Asia/Dhaka')::date >
+                        (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::date
+                    ) AS can_join_waitlist,
+
+
 
                     to_char(
                         starts_at AT TIME ZONE 'Asia/Dhaka',
@@ -312,9 +326,31 @@ def my_appointments():
                         ends_at AT TIME ZONE 'Asia/Dhaka',
                         'HH12:MI AM'
                     ) AS end_time
-                FROM hospital.patient_appointments(%s)
+                               FROM hospital.patient_appointments(%s) AS visit
+                LEFT JOIN hospital.patient_active_waitlist(%s) AS wait
+                  ON wait.original_appointment_id = visit.appointment_id
                 ORDER BY starts_at DESC, appointment_id DESC
+            """, (user_id, user_id)).fetchall()
+
+            offer_rows = connection.execute("""
+                SELECT
+                    appointment_id,
+                    to_char(offered_start AT TIME ZONE 'Asia/Dhaka',
+                            'Dy, DD Mon YYYY') AS visit_date,
+                    to_char(offered_start AT TIME ZONE 'Asia/Dhaka',
+                            'HH12:MI AM') AS start_time,
+                    to_char(offered_end AT TIME ZONE 'Asia/Dhaka',
+                            'HH12:MI AM') AS end_time,
+                    to_char(expires_at AT TIME ZONE 'Asia/Dhaka',
+                            'DD Mon YYYY, HH12:MI AM') AS deadline
+                FROM hospital.patient_pending_offers(%s)
             """, (user_id,)).fetchall()
+
+            offers_by_appointment = {
+                row["appointment_id"]: row for row in offer_rows
+            }
+
+
 
     except psycopg.Error as exc:
         current_app.logger.error(
@@ -325,7 +361,10 @@ def my_appointments():
     response = current_app.make_response(render_template(
         "my_appointments.html",
         appointments=appointments,
+                offers_by_appointment=offers_by_appointment,
+
                 cancel_form=CancelAppointmentForm(),
+                waitlist_form=WaitlistForm(),
     ))
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -566,3 +605,78 @@ def reschedule_visit(appointment_id):
     ))
     response.headers["Cache-Control"] = "no-store"
     return response
+
+class WaitlistForm(FlaskForm):
+    earliest_date = DateField("Earliest date", validators=[DataRequired()])
+    latest_date = DateField("Latest date", validators=[DataRequired()])
+
+
+@auth.post("/appointments/<int:appointment_id>/waitlist")
+def join_waitlist(appointment_id):
+    user_id = session.get("user_id")
+    email = session.get("email")
+
+    if user_id is None or not email:
+        return redirect(url_for("auth.login"), code=303)
+
+    form = WaitlistForm()
+
+    if not form.validate_on_submit():
+        if form.csrf_token.errors:
+            message = "Please reload My appointments and submit the request again."
+        else:
+            message = "Please enter both dates."
+        flash(message, "error")
+        return redirect(url_for("auth.my_appointments"), code=303)
+
+    try:
+        patient = lookup_patient(email)
+        if patient is None or patient["user_id"] != user_id:
+            session.clear()
+            return redirect(url_for("auth.login"), code=303)
+
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya waitlist",
+        ) as connection:
+            request_id = connection.execute(
+                "SELECT hospital.join_waitlist(%s, %s, %s, %s)",
+                (
+                    patient["patient_id"],
+                    appointment_id,
+                    form.earliest_date.data,
+                    form.latest_date.data,
+                ),
+            ).fetchone()[0]
+
+        flash(
+            f"Waitlist request #{request_id} was saved. "
+            "Your original appointment is still booked.",
+            "success",
+        )
+
+    except psycopg.errors.RaiseException as exc:
+        reasons = {
+            "This appointment already has an active waitlist request":
+                "You already have an active request for this visit.",
+            "Choose dates from today through the day before your booked visit":
+                "Choose a range from today through the day before your visit.",
+            "Only a future booked appointment can join the waitlist":
+                "Only an upcoming booked visit can join the waitlist.",
+        }
+        flash(
+            reasons.get(exc.diag.message_primary,
+                        "This visit is unavailable for a waitlist request."),
+            "error",
+        )
+
+    except psycopg.Error as exc:
+        current_app.logger.error("Waitlist request failed; SQLSTATE=%s", exc.sqlstate)
+        return "Waitlist temporarily unavailable. Please try again shortly.", 503
+
+    return redirect(url_for("auth.my_appointments"), code=303)

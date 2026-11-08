@@ -62,6 +62,69 @@
         </form>
     </details>
 {% endif %}
+
+
+{% if visit.waitlist_id %}
+    <div class="auth-field">
+        {% if visit.waitlist_until >= visit.clinic_today %}
+            <strong>Earlier-visit request · Active</strong>
+        {% else %}
+            <strong>Earlier-visit request · Date range ended</strong>
+        {% endif %}
+        <p>
+            Requested dates:
+            {{ visit.waitlist_from.strftime('%d %b %Y') }}
+            to {{ visit.waitlist_until.strftime('%d %b %Y') }}.
+        </p>
+    </div>
+{% elif visit.can_join_waitlist %}
+    <details class="auth-field">
+        <summary class="text-link">Request an earlier visit</summary>
+        <form method="post"
+              action="{{ url_for('auth.join_waitlist',
+                                 appointment_id=visit.appointment_id) }}">
+            {{ waitlist_form.csrf_token(id='wait-csrf-' ~ visit.appointment_id) }}
+
+            <p>Choose the dates you can attend with {{ visit.doctor_name }}.
+               Your current visit stays booked.</p>
+
+            <div class="filter-field">
+                <label for="earliest-{{ visit.appointment_id }}">Earliest date</label>
+                {{ waitlist_form.earliest_date(
+                    id='earliest-' ~ visit.appointment_id,
+                    min=visit.clinic_today.isoformat(),
+                    max=visit.last_earlier_date.isoformat()
+                ) }}
+            </div>
+
+            <div class="filter-field auth-field">
+                <label for="latest-{{ visit.appointment_id }}">Latest date</label>
+                {{ waitlist_form.latest_date(
+                    id='latest-' ~ visit.appointment_id,
+                    min=visit.clinic_today.isoformat(),
+                    max=visit.last_earlier_date.isoformat()
+                ) }}
+            </div>
+
+            <button type="submit" class="button filter-submit">
+                Join waitlist
+            </button>
+        </form>
+    </details>
+{% endif %}
+
+{% set offer = offers_by_appointment.get(visit.appointment_id) %}
+{% if offer %}
+    <section class="message">
+        <h3>An earlier visit is available</h3>
+        <p><strong>{{ offer.visit_date }}</strong><br>
+           {{ offer.start_time }} – {{ offer.end_time }}</p>
+        <p>Respond by {{ offer.deadline }} (Bangladesh time).</p>
+        <p>Your current appointment stays booked until you accept.</p>
+    </section>
+{% endif %}
+
+
                         </article>
                     {% endfor %}
                 </div>
