@@ -297,6 +297,9 @@ def my_appointments():
                     department,
                     status,
                     booked_fee,
+                                        (status = 'Booked' AND starts_at > CURRENT_TIMESTAMP)
+                        AS can_cancel,
+
                     to_char(
                         starts_at AT TIME ZONE 'Asia/Dhaka',
                         'Dy, DD Mon YYYY'
@@ -322,6 +325,7 @@ def my_appointments():
     response = current_app.make_response(render_template(
         "my_appointments.html",
         appointments=appointments,
+                cancel_form=CancelAppointmentForm(),
     ))
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -393,5 +397,67 @@ def book_slot(slot_id):
     except psycopg.Error as exc:
         current_app.logger.error("Booking failed; SQLSTATE=%s", exc.sqlstate)
         return "Booking is temporarily unavailable. Check My appointments before retrying.", 503
+
+    return redirect(url_for("auth.my_appointments"), code=303)
+
+class CancelAppointmentForm(FlaskForm):
+    submit = SubmitField("Confirm cancellation")
+
+
+@auth.post("/appointments/<int:appointment_id>/cancel")
+def cancel_visit(appointment_id):
+    user_id = session.get("user_id")
+    email = session.get("email")
+
+    if user_id is None or not email:
+        return redirect(url_for("auth.login"), code=303)
+
+    if not CancelAppointmentForm().validate_on_submit():
+        return "Please reload My appointments and try again.", 400
+
+    try:
+        patient = lookup_patient(email)
+        if patient is None or patient["user_id"] != user_id:
+            session.clear()
+            return redirect(url_for("auth.login"), code=303)
+
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya cancellation",
+        ) as connection:
+            row = connection.execute(
+                "SELECT hospital.cancel_appointment(%s, %s)",
+                (patient["patient_id"], appointment_id),
+            ).fetchone()
+            changed = row[0]
+
+        if changed:
+            flash(f"Appointment #{appointment_id} was cancelled.", "success")
+        else:
+            flash("This appointment was already cancelled.", "success")
+
+    except psycopg.errors.RaiseException as exc:
+        reasons = {
+            "Cannot cancel an appointment that has started":
+                "This visit has already started.",
+            "Only booked appointments can be cancelled":
+                "Only a booked visit can be cancelled.",
+            "Appointment changed; retry cancellation":
+                "This visit changed. Check its current status and try again.",
+        }
+        flash(
+            reasons.get(exc.diag.message_primary,
+                        "This appointment cannot be cancelled from your account."),
+            "error",
+        )
+
+    except psycopg.Error as exc:
+        current_app.logger.error("Cancellation failed; SQLSTATE=%s", exc.sqlstate)
+        return "Please check My appointments before retrying cancellation.", 503
 
     return redirect(url_for("auth.my_appointments"), code=303)

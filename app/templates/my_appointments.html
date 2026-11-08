@@ -42,6 +42,21 @@
                                 <span>Fee at booking</span>
                                 <strong>Tk {{ "%.2f" | format(visit.booked_fee) }}</strong>
                             </div>
+                            {% if visit.can_cancel %}
+    <details class="auth-field">
+        <summary class="text-link">Cancel appointment</summary>
+        <form method="post"
+              action="{{ url_for('auth.cancel_visit',
+                                 appointment_id=visit.appointment_id) }}">
+            {{ cancel_form.hidden_tag() }}
+            <p>Cancel your visit with {{ visit.doctor_name }}
+               on {{ visit.visit_date }} at {{ visit.start_time }}?</p>
+            <button type="submit" class="button filter-submit">
+                Confirm cancellation
+            </button>
+        </form>
+    </details>
+{% endif %}
                         </article>
                     {% endfor %}
                 </div>
