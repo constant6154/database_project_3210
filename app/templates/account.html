@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My account — Veya</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('home') }}">veya<span>・</span></a>
+        <form method="post" action="{{ url_for('auth.logout') }}">
+            {{ logout_form.hidden_tag() }}
+            {{ logout_form.submit(class_="button filter-submit") }}
+        </form>
+    </header>
+
+    <main>
+        <section class="auth-layout">
+            <div class="auth-intro">
+                <p class="eyebrow">MY ACCOUNT</p>
+                <h1>Welcome, <em>{{ full_name }}.</em></h1>
+                <a class="button" href="{{ url_for('home') }}#availability">
+                    Browse appointments ↗
+                </a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
