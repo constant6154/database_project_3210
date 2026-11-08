@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reschedule visit — Veya</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('home') }}">veya<span>・</span></a>
+        <a class="nav-link" href="{{ url_for('auth.my_appointments') }}">
+            My appointments
+        </a>
+    </header>
+
+    <main>
+        <section class="auth-layout">
+            <div class="auth-intro">
+                <h1>Reschedule <em>visit.</em></h1>
+                <p>Currently booked with <strong>{{ visit.doctor_name }}</strong></p>
+                <p>{{ visit.current_time }} · Bangladesh time</p>
+            </div>
+
+            <form method="post" class="auth-card">
+                {{ form.hidden_tag() }}
+                <h2>Choose a new time</h2>
+                <p>Your current visit stays booked until the move succeeds.</p>
+
+                {% if form.csrf_token.errors %}
+                    <p class="field-error" role="alert">
+                        Reload this page and try again.
+                    </p>
+                {% endif %}
+
+                {% if form.slot_id.choices %}
+                    <div class="filter-field">
+                        {{ form.slot_id.label }}
+                        {{ form.slot_id() }}
+                    </div>
+                    {% for error in form.slot_id.errors %}
+                        <p class="field-error" role="alert">
+                            Please choose a time from the current list.
+                        </p>
+                    {% endfor %}
+                    {{ form.submit(class_="button auth-submit") }}
+                {% else %}
+                    <p>No other openings are available in {{ visit.department }}.</p>
+                {% endif %}
+
+                <p><a class="text-link" href="{{ url_for('auth.my_appointments') }}">
+                    Back to my appointments
+                </a></p>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

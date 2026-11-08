@@ -43,6 +43,11 @@
                                 <strong>Tk {{ "%.2f" | format(visit.booked_fee) }}</strong>
                             </div>
                             {% if visit.can_cancel %}
+                            <a class="text-link"
+   href="{{ url_for('auth.reschedule_visit',
+                    appointment_id=visit.appointment_id) }}">
+    Reschedule visit
+</a>
     <details class="auth-field">
         <summary class="text-link">Cancel appointment</summary>
         <form method="post"

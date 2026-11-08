@@ -3,7 +3,7 @@ import os
 from flask import session
 from psycopg.rows import dict_row
 from werkzeug.security import check_password_hash
-
+from wtforms import SelectField
 
 import psycopg
 from flask import (
@@ -461,3 +461,108 @@ def cancel_visit(appointment_id):
         return "Please check My appointments before retrying cancellation.", 503
 
     return redirect(url_for("auth.my_appointments"), code=303)
+
+class RescheduleForm(FlaskForm):
+    slot_id = SelectField(
+        "New appointment time",
+        coerce=int,
+        validators=[DataRequired(message="Choose an available time.")],
+    )
+    submit = SubmitField("Confirm new time")
+
+
+@auth.route("/appointments/<int:appointment_id>/reschedule",
+            methods=["GET", "POST"])
+def reschedule_visit(appointment_id):
+    user_id = session.get("user_id")
+    email = session.get("email")
+
+    if user_id is None or not email:
+        return redirect(url_for("auth.login"), code=303)
+
+    form = RescheduleForm()
+    status_code = 200
+
+    try:
+        patient = lookup_patient(email)
+        if patient is None or patient["user_id"] != user_id:
+            session.clear()
+            return redirect(url_for("auth.login"), code=303)
+
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya rescheduling",
+            row_factory=dict_row,
+        ) as connection:
+            # Find this appointment among the signed-in patient's visits.
+            visit = connection.execute("""
+                SELECT doctor_name, department,
+                       to_char(starts_at AT TIME ZONE 'Asia/Dhaka',
+                               'Dy, DD Mon YYYY · HH12:MI AM') AS current_time
+                FROM hospital.patient_appointments(%s)
+                WHERE appointment_id = %s
+                  AND status = 'Booked'
+                  AND starts_at > CURRENT_TIMESTAMP
+            """, (user_id, appointment_id)).fetchone()
+
+            if visit is None:
+                flash("This appointment is unavailable for rescheduling.", "error")
+                return redirect(url_for("auth.my_appointments"), code=303)
+
+            slots = connection.execute("""
+                SELECT slot_id, doctor_name, consultation_fee,
+                       to_char(starts_at AT TIME ZONE 'Asia/Dhaka',
+                               'Dy, DD Mon YYYY · HH12:MI AM') AS new_time
+                FROM hospital.available_slots
+                WHERE department = %s
+                ORDER BY starts_at, doctor_id, slot_id
+            """, (visit["department"],)).fetchall()
+
+            form.slot_id.choices = [
+                (slot["slot_id"],
+                 f"{slot['new_time']} · {slot['doctor_name']} · "
+                 f"Tk {slot['consultation_fee']:.2f}")
+                for slot in slots
+            ]
+
+            if form.validate_on_submit():
+                result = connection.execute("""
+                    SELECT hospital.reschedule_appointment(%s, %s, %s)
+                           AS new_id
+                """, (
+                    patient["patient_id"],
+                    appointment_id,
+                    form.slot_id.data,
+                )).fetchone()
+            elif request.method == "POST":
+                status_code = 400
+
+        # The database transaction has committed before success is shown.
+        if request.method == "POST" and status_code == 200:
+            flash(f"Visit moved. Your new appointment is #{result['new_id']}.",
+                  "success")
+            return redirect(url_for("auth.my_appointments"), code=303)
+
+    except psycopg.errors.RaiseException as exc:
+        if exc.diag.message_primary == "Patient already has an overlapping appointment":
+            message = "You already have a visit at that time. Choose another slot."
+        else:
+            message = "The visit could not be moved. Check its status and choose an available time."
+        flash(message, "error")
+        return redirect(url_for("auth.my_appointments"), code=303)
+
+    except psycopg.Error as exc:
+        current_app.logger.error("Rescheduling failed; SQLSTATE=%s", exc.sqlstate)
+        return "Please check My appointments before retrying.", 503
+
+    response = current_app.make_response((
+        render_template("reschedule.html", visit=visit, form=form),
+        status_code,
+    ))
+    response.headers["Cache-Control"] = "no-store"
+    return response
