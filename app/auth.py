@@ -804,3 +804,39 @@ def decline_offer(offer_id):
             flash("The response deadline for this offer has passed.", "error")
 
     return redirect(url_for("auth.my_appointments"), code=303)
+
+
+
+@auth.before_app_request
+def process_due_offers_before_visit():
+    endpoint = request.endpoint
+
+    if endpoint != "home" and request.blueprint != auth.name:
+        return None
+
+    if endpoint in {"auth.login", "auth.logout", "auth.register", "auth.account"}:
+        return None
+
+    try:
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya offer expiry",
+            autocommit=True,
+        ) as connection:
+            processed = connection.execute(
+                "SELECT hospital.process_due_slot_offers()"
+            ).fetchone()[0]
+
+    except psycopg.Error:
+        current_app.logger.exception("Could not process overdue visit offers")
+        return "Appointment availability is temporarily unavailable. Please retry.", 503
+
+    if processed:
+        current_app.logger.info("Processed %d overdue visit offer(s)", processed)
+
+    return None
