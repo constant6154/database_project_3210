@@ -121,6 +121,20 @@
            {{ offer.start_time }} – {{ offer.end_time }}</p>
         <p>Respond by {{ offer.deadline }} (Bangladesh time).</p>
         <p>Your current appointment stays booked until you accept.</p>
+        <form method="post"
+      action="{{ url_for('auth.accept_offer', offer_id=offer.offer_id) }}">
+   {{ cancel_form.csrf_token(id="accept-csrf-" ~ offer.offer_id) }}
+    <button type="submit" class="button filter-submit">
+        Accept earlier visit
+    </button>
+</form>
+<form method="post"
+      action="{{ url_for('auth.decline_offer', offer_id=offer.offer_id) }}">
+    {{ cancel_form.csrf_token(id="decline-csrf-" ~ offer.offer_id) }}
+    <button type="submit" class="button">
+        Decline earlier visit
+    </button>
+</form>
     </section>
 {% endif %}
 

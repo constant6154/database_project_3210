@@ -4,6 +4,7 @@ from flask import session
 from psycopg.rows import dict_row
 from werkzeug.security import check_password_hash
 from wtforms import SelectField
+from .database import process_due_slot_offers
 
 import psycopg
 from flask import (
@@ -335,6 +336,7 @@ def my_appointments():
             offer_rows = connection.execute("""
                 SELECT
                     appointment_id,
+                    offer_id,
                     to_char(offered_start AT TIME ZONE 'Asia/Dhaka',
                             'Dy, DD Mon YYYY') AS visit_date,
                     to_char(offered_start AT TIME ZONE 'Asia/Dhaka',
@@ -397,6 +399,8 @@ def book_slot(slot_id):
         if patient is None or patient["user_id"] != user_id:
             session.clear()
             return redirect(url_for("auth.login"), code=303)
+
+        process_due_slot_offers()
 
         with psycopg.connect(
             host=os.environ["DB_HOST"],
@@ -527,6 +531,8 @@ def reschedule_visit(appointment_id):
         if patient is None or patient["user_id"] != user_id:
             session.clear()
             return redirect(url_for("auth.login"), code=303)
+
+        process_due_slot_offers()
 
         with psycopg.connect(
             host=os.environ["DB_HOST"],
@@ -678,5 +684,123 @@ def join_waitlist(appointment_id):
     except psycopg.Error as exc:
         current_app.logger.error("Waitlist request failed; SQLSTATE=%s", exc.sqlstate)
         return "Waitlist temporarily unavailable. Please try again shortly.", 503
+
+    return redirect(url_for("auth.my_appointments"), code=303)
+
+
+@auth.post("/offers/<int:offer_id>/accept")
+def accept_offer(offer_id):
+    user_id = session.get("user_id")
+    email = session.get("email")
+
+    if user_id is None or not email:
+        return redirect(url_for("auth.login"), code=303)
+
+    if not FlaskForm().validate_on_submit():
+        return "Please reload My appointments and try again.", 400
+
+    try:
+        patient = lookup_patient(email)
+        if patient is None or patient["user_id"] != user_id:
+            session.clear()
+            return redirect(url_for("auth.login"), code=303)
+
+        process_due_slot_offers()
+
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya offer acceptance",
+        ) as connection:
+            row = connection.execute(
+                "SELECT hospital.accept_slot_offer(%s, %s)",
+                (user_id, offer_id),
+            ).fetchone()
+            appointment_id = row[0]
+
+    except psycopg.errors.RaiseException as exc:
+        message = exc.diag.message_primary
+        if message in {
+            "Offer unavailable for this account",
+            "Earlier-visit offer is no longer available",
+            "Original appointment is no longer eligible",
+        }:
+            flash("This offer is no longer available to accept.", "error")
+        elif message == "Patient already has an overlapping appointment":
+            flash("You already have an appointment at that time.", "error")
+        else:
+            current_app.logger.exception("Earlier-visit acceptance failed")
+            flash("We couldn't move your appointment. Please check your visits.", "error")
+
+    except psycopg.Error:
+        current_app.logger.exception("Database error during offer acceptance")
+        flash("Please refresh My appointments to check your booking.", "error")
+
+    else:
+        flash(f"Earlier visit confirmed. Appointment #{appointment_id} is booked.", "success")
+
+    return redirect(url_for("auth.my_appointments"), code=303)
+
+
+
+@auth.post("/offers/<int:offer_id>/decline")
+def decline_offer(offer_id):
+    user_id = session.get("user_id")
+    email = session.get("email")
+
+    if user_id is None or not email:
+        return redirect(url_for("auth.login"), code=303)
+
+    if not FlaskForm().validate_on_submit():
+        return "Please reload My appointments and try again.", 400
+
+    try:
+        patient = lookup_patient(email)
+        if patient is None or patient["user_id"] != user_id:
+            session.clear()
+            return redirect(url_for("auth.login"), code=303)
+
+        with psycopg.connect(
+            host=os.environ["DB_HOST"],
+            port=os.environ["DB_PORT"],
+            dbname=os.environ["DB_NAME"],
+            user=os.environ["DB_USER"],
+            password=os.environ["DB_PASSWORD"],
+            connect_timeout=5,
+            application_name="Veya offer decline",
+        ) as connection:
+            row = connection.execute(
+                "SELECT hospital.decline_slot_offer(%s, %s)",
+                (user_id, offer_id),
+            ).fetchone()
+            outcome = row[0]
+
+    except psycopg.errors.RaiseException as exc:
+        if exc.diag.message_primary in {
+            "Offer unavailable for this account",
+            "This offer is already closed",
+        }:
+            flash("This offer is no longer available to decline.", "error")
+        else:
+            current_app.logger.exception("Earlier-visit decline failed")
+            flash("We couldn't confirm the decline. Please check your visits.", "error")
+
+    except psycopg.Error:
+        current_app.logger.exception("Database error while declining an offer")
+        flash("We couldn't confirm the decline. Please check your visits.", "error")
+
+    else:
+        if outcome == "Declined":
+            flash(
+                "Earlier visit declined. Your original appointment is still booked "
+                "and you’re still on the waitlist.",
+                "success",
+            )
+        elif outcome == "Expired":
+            flash("The response deadline for this offer has passed.", "error")
 
     return redirect(url_for("auth.my_appointments"), code=303)

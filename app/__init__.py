@@ -2,6 +2,7 @@ import os
 from datetime import date
 from pathlib import Path
 from .auth import auth
+from .database import process_due_slot_offers
 
 import psycopg
 from psycopg.rows import dict_row
@@ -76,6 +77,8 @@ def create_app():
         }
 
         try:
+            process_due_slot_offers()
+
             with psycopg.connect(
                 host=os.environ["DB_HOST"],
                 port=os.environ["DB_PORT"],
