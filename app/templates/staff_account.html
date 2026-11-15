@@ -14,10 +14,34 @@
             {{ form.submit(class_="button") }}
         </form>
     </header>
-    <main class="auth-layout">
+    <main class="availability">
         <section class="auth-intro">
             <h1>Staff <em>account.</em></h1>
             <p>Signed in as <strong>{{ email }}</strong></p>
+        </section>
+        <section aria-labelledby="schedule">
+            <h2 id="schedule">Daily appointments</h2>
+            <form class="summary" method="get">
+                <label>Clinic date <input type="date" name="day" value="{{ day }}" required></label>
+                <button class="button">View schedule</button>
+            </form>
+            <p>{{ visits|length }} appointments · Bangladesh time</p>
+            <div class="slot-grid">
+                {% for v in visits %}
+                <article class="slot-card">
+                    <span class="department">{{ v.department }} · {{ v.status }}</span>
+                    <h3>{{ v.visit_time.strftime('%H:%M') }} · {{ v.patient }}</h3>
+                    <p>{{ v.doctor }} · Visit #{{ v.visit }}</p>
+                </article>
+                {% else %}<p>No appointments for this date.</p>{% endfor %}
+            </div>
+            <h2>Booking availability</h2>
+            <p>Generate the next 28 days of slots from the doctors’ weekly schedules.</p>
+            <form method="post">
+                {{ form.hidden_tag() }}
+                <button class="button">Refresh appointment slots</button>
+            </form>
+            {% for message in get_flashed_messages() %}<p role="status">{{ message }}</p>{% endfor %}
         </section>
     </main>
 </body>

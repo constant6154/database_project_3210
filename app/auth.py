@@ -1,4 +1,6 @@
 import os
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from wtforms import DateField
 from flask import session
 from psycopg.rows import dict_row
@@ -845,17 +847,21 @@ def process_due_offers_before_visit():
     return None
 
 
-def lookup_staff(email):
-    with psycopg.connect(
+def staff_connection():
+    return psycopg.connect(
         host=os.environ["DB_HOST"],
         port=os.environ["DB_PORT"],
         dbname=os.environ["DB_NAME"],
         user=os.environ["DB_USER"],
         password=os.environ["DB_PASSWORD"],
         connect_timeout=5,
-        application_name="Veya staff login",
+        application_name="Veya staff",
         row_factory=dict_row,
-    ) as connection:
+    )
+
+
+def lookup_staff(email):
+    with staff_connection() as connection:
         return connection.execute(
             """
             SELECT user_id, email, password_hash
@@ -892,7 +898,7 @@ def staff_login():
     return render_template("staff_login.html", form=form, error=error), status
 
 
-@auth.get("/staff")
+@auth.route("/staff", methods=["GET", "POST"])
 def staff_account():
     email = session.get("staff_email")
     user_id = session.get("staff_user_id")
@@ -906,6 +912,30 @@ def staff_account():
     if staff is None or staff["user_id"] != user_id:
         session.clear()
         return redirect(url_for("auth.staff_login"))
+    form = LogoutForm()
+    today = datetime.now(ZoneInfo("Asia/Dhaka")).date()
+    try:
+        day = date.fromisoformat(request.args.get("day", today.isoformat()))
+    except ValueError:
+        return "Choose a valid clinic date.", 400
+    try:
+        with staff_connection() as connection:
+            if request.method == "POST":
+                if not form.validate_on_submit():
+                    return "Reload the staff page before submitting.", 400
+                created = connection.execute(
+                    "SELECT hospital.refresh_clinic_slots() AS count"
+                ).fetchone()["count"]
+            else:
+                visits = connection.execute(
+                    "SELECT * FROM hospital.staff_day(%s)", (day,)
+                ).fetchall()
+    except psycopg.Error:
+        current_app.logger.exception("Staff dashboard query failed")
+        return "Staff schedule unavailable. Check that migration 36 was applied.", 503
+    if request.method == "POST":
+        flash(f"{created} new appointment slots generated.")
+        return redirect(url_for("auth.staff_account", day=day), code=303)
     return render_template(
-        "staff_account.html", email=staff["email"], form=LogoutForm()
+        "staff_account.html", email=email, form=form, day=day, visits=visits
     ), 200, {"Cache-Control": "no-store"}
