@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Staff account — Veya</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('home') }}">veya<span>・</span></a>
+        <form method="post" action="{{ url_for('auth.logout') }}">
+            {{ form.hidden_tag() }}
+            {{ form.submit(class_="button") }}
+        </form>
+    </header>
+    <main class="auth-layout">
+        <section class="auth-intro">
+            <h1>Staff <em>account.</em></h1>
+            <p>Signed in as <strong>{{ email }}</strong></p>
+        </section>
+    </main>
+</body>
+</html>

@@ -814,7 +814,10 @@ def process_due_offers_before_visit():
     if endpoint != "home" and request.blueprint != auth.name:
         return None
 
-    if endpoint in {"auth.login", "auth.logout", "auth.register", "auth.account"}:
+    if endpoint in {
+        "auth.login", "auth.logout", "auth.register", "auth.account",
+        "auth.staff_login", "auth.staff_account",
+    }:
         return None
 
     try:
@@ -840,3 +843,69 @@ def process_due_offers_before_visit():
         current_app.logger.info("Processed %d overdue visit offer(s)", processed)
 
     return None
+
+
+def lookup_staff(email):
+    with psycopg.connect(
+        host=os.environ["DB_HOST"],
+        port=os.environ["DB_PORT"],
+        dbname=os.environ["DB_NAME"],
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        connect_timeout=5,
+        application_name="Veya staff login",
+        row_factory=dict_row,
+    ) as connection:
+        return connection.execute(
+            """
+            SELECT user_id, email, password_hash
+            FROM hospital.lookup_staff_login(%s)
+            """,
+            (email,),
+        ).fetchone()
+
+
+@auth.route("/staff/login", methods=["GET", "POST"])
+def staff_login():
+    form = LoginForm()
+    error = None
+    status = 200
+    if form.validate_on_submit():
+        try:
+            staff = lookup_staff(form.email.data)
+        except psycopg.Error:
+            current_app.logger.exception("Staff sign-in lookup failed")
+            error = "Staff sign-in is temporarily unavailable."
+            status = 503
+        else:
+            stored_hash = staff["password_hash"] if staff else DUMMY_HASH
+            matches = check_password_hash(stored_hash or DUMMY_HASH, form.password.data)
+            if staff and matches:
+                session.clear()
+                session["staff_user_id"] = staff["user_id"]
+                session["staff_email"] = staff["email"]
+                return redirect(url_for("auth.staff_account"), code=303)
+            error = "Incorrect staff email or password."
+            status = 401
+    elif request.method == "POST":
+        status = 400
+    return render_template("staff_login.html", form=form, error=error), status
+
+
+@auth.get("/staff")
+def staff_account():
+    email = session.get("staff_email")
+    user_id = session.get("staff_user_id")
+    if not email or user_id is None:
+        return redirect(url_for("auth.staff_login"))
+    try:
+        staff = lookup_staff(email)
+    except psycopg.Error:
+        current_app.logger.exception("Staff account lookup failed")
+        return "Staff account temporarily unavailable.", 503
+    if staff is None or staff["user_id"] != user_id:
+        session.clear()
+        return redirect(url_for("auth.staff_login"))
+    return render_template(
+        "staff_account.html", email=staff["email"], form=LogoutForm()
+    ), 200, {"Cache-Control": "no-store"}
